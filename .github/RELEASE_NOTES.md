@@ -54,7 +54,8 @@ TrafficMonitor 插件：把「今天上班已经赚了多少钱」实时挂在�
 A TrafficMonitor plugin that puts **"how much money I've earned today"** on your taskbar,
 ticking up second by second.
 
-> Screenshots and a full English manual: [README.en.md](../README.en.md)
+> Screenshots and a full English manual:
+> [README.en.md](https://github.com/IInit/SalaryMonitor/blob/main/README.en.md)
 
 ## Highlights
 

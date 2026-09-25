@@ -1,10 +1,14 @@
 <div align="center">
 
+<img src="docs/images/icon.png" width="80" alt="SalaryMonitor 图标">
+
 # SalaryMonitor · 工资监测
 
 **TrafficMonitor 插件：把「今天已经赚了多少钱」实时挂在任务栏上，一秒一秒往上跳。**
 
 支持 20 种职业预设 × 6 种计薪方式，按排班、午休、加班倍率精确到秒。
+
+[**中文**](README.md) · [English](README.en.md)
 
 </div>
 
@@ -24,6 +28,23 @@ SalaryMonitor 把这个过程变成**可见的、正在增长的数**：
 
 它按你所在职业的真实计薪口径逐秒累计 —— 午休时数字停住，进入加班时段数字加速跳，
 下班后冻结，周末班的钱按周末倍率算。不是估算，也不是励志话术，是真算法。
+
+## 界面
+
+**任务栏实际效果**（与 CPU / 内存 / 网速等项并列，最右侧是 SalaryMonitor）：
+
+<img src="docs/images/taskbar.png" width="640" alt="任务栏实际效果">
+
+> 真实任务栏截图。截图时为中国时间周六 00:19，所选职业「教师」为双休，
+> 因此「今日」显示 `¥0.00` —— **休息日本来就不计薪**，这是正确行为。
+
+**工资与排班设置**（底部实时试算，改任何参数立刻重算）：
+
+<img src="docs/images/settings.png" width="600" alt="工资与排班设置">
+
+**收益统计**（今日 / 本周 / 本月 / 本年 + 逐日明细）：
+
+<img src="docs/images/stats.png" width="600" alt="收益统计">
 
 ## 安装
 
@@ -191,6 +212,19 @@ CI（GitHub Actions，`windows-2022`）会自动探测这些路径。
   枚举全部子控件，断言"全部可见 / 未被裁剪 / 文字放得下"，并跑完整交互链：
   切换职业 → 参数自动变化 → 确定保存 → 重开回显 → 统计窗口有 21 行明细 →
   多级目录兜底创建 → 不可写路径必须弹错（不许静默失败）。探针还会把对话框截图落盘。
+
+### 本文档里的截图怎么来的
+
+都不是手绘或合成，全部是本机真实运行抓下来的：
+
+* `docs/images/settings.png`、`docs/images/stats.png` —— 由上面的对话框探针在
+  **配置被任何测试改写之前**（Phase 0 / 0b）自动截图，所以拍到的就是出厂默认值
+  （程序员 / 月薪 25000 / ¥）。后续 Phase 会故意改成"教师 / 8888 / $"来验证保存与回显，
+  那几张图不适合放进文档，因此单独分了阶段。
+* `docs/images/taskbar.png` —— `python3 tools/shot_taskbar.py` 抓的**真实任务栏**。
+  任务栏窗口是 TrafficMonitor 用 `SetParent` 嵌进 `Shell_TrayWnd` 的子窗口，
+  普通顶层窗口枚举看不到它，脚本因此走 `EnumChildWindows` 定位，并先把进程设为
+  DPI 感知，避免缩放显示器上坐标与位图对不上。
 
 ## 许可
 

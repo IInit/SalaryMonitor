@@ -46,3 +46,71 @@ TrafficMonitor 插件：把「今天上班已经赚了多少钱」实时挂在�
 - 缺勤 / 请假 / 迟到早退按排班模型估算，不会自动识别（插件只读系统时间）；
 - 实发工资与税前口径、社保公积金无关，这里是"按你填的月薪/单价算的名义收入"；
 - 需要 TrafficMonitor 1.84+（插件接口版本 ≥ 7）的 x64 版本。
+
+---
+
+# SalaryMonitor v1.0.0 (English)
+
+A TrafficMonitor plugin that puts **"how much money I've earned today"** on your taskbar,
+ticking up second by second.
+
+> Screenshots and a full English manual: [README.en.md](../README.en.md)
+
+## Highlights
+
+- **6 pay models** — fixed monthly / monthly + overtime / hourly / daily / piece rate /
+  base + commission
+- **20 occupation presets** — programmer, teacher, doctor, civil servant, sales, delivery
+  rider, courier, ride-hail driver, tutor, lawyer, streamer, construction day labourer,
+  hairdresser and more. Selecting one applies sensible defaults; every field stays editable
+- **Second-accurate rules** — lunch is unpaid, the amount freezes after clock-off, overtime
+  accelerates at a multiplier, weekend shifts are paid at the weekend multiplier
+- **20 display items** — earned today, current hourly rate, payment progress, a custom-drawn
+  progress bar, earned this month, days to payday, and more
+- **Earnings statistics window** — today / week / month / year summary plus a day-by-day table
+- **Fully offline** — no network access; settings live only in
+  `%APPDATA%\TrafficMonitor\plugins\`
+
+## Install
+
+1. Extract `SalaryMonitor.dll` into the `plugins\` folder inside your TrafficMonitor
+   program directory.
+2. Restart TrafficMonitor, right-click the taskbar window → Display settings → tick the
+   items you want.
+3. Right-click → Plugin commands → **Salary & shift settings…**, pick your occupation and
+   confirm the salary and working hours.
+
+## Pay models at a glance
+
+| Model | Current rate (per second) | Overtime |
+|---|---|---|
+| Fixed monthly | salary ÷ total scheduled seconds this month | none (not tied to hours) |
+| Monthly + overtime | salary ÷ standard-hours seconds this month | past standard ×1.5, weekends ×2 |
+| Hourly | hourly wage ÷ 3600 | optional, same multipliers |
+| Daily | daily wage ÷ that day's scheduled seconds | optional; past standard hours multiplied |
+| Piece rate | (unit price × units today) ÷ that day's scheduled seconds | none (spread over the day) |
+| Base + commission | (base ÷ working days + daily business × rate) ÷ that day's scheduled seconds | none (spread over the day) |
+
+Earned today is the integral of the rate curve from midnight to now; month and year figures
+are derived from the schedule model — so restarts, sleep and clock jumps can never
+corrupt the numbers, and no accumulated state is needed.
+
+## Quality
+
+This release passes a zero-failure automated verification suite:
+
+- Deterministic pay-engine assertions (6 models / lunch exclusion / overtime multipliers /
+  whole-month rule / payday / formatting / config round-trip)
+- Plugin interface contract (exported symbol, 20 display items return values, tooltip,
+  5 commands, config persisted)
+- Dialog probe (both windows really opened: every control visible, not clipped, text fits;
+  switch occupation → save → reopen and verify → statistics; a non-writable path must
+  report an error rather than fail silently)
+
+## Known limitations
+
+- Absence, leave and lateness are estimated from the schedule — the plugin only reads the
+  system clock, it cannot detect real attendance;
+- Figures are nominal gross pay based on the salary you enter; they ignore tax, social
+  insurance and housing fund contributions;
+- Requires the x64 build of TrafficMonitor 1.84+ (plugin interface version ≥ 7).

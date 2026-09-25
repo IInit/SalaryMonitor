@@ -543,6 +543,32 @@ int wmain(int argc, wchar_t** argv)
         }
     }
 
+    // ---- Phase 0b：同一份默认配置下的设置窗口（README 主图）----
+    // 设置窗口底部的实时试算，是"这套参数到底怎么算"最直观的一张图。
+    // 同样必须在配置被测试改写之前截，否则会拍成测试用的教师/8888/$。
+    std::printf("\n============ Phase 0b：默认配置下的设置窗口（供文档截图） ============\n");
+    {
+        std::thread wb;
+        HWND db = OpenDialog(plugin, wb, CMD_OPTIONS, 8000);
+        Check(db != nullptr, "默认配置下设置对话框可打开");
+        if (db != nullptr)
+        {
+            ::Sleep(500);                      // 等实时试算把首帧数字填好
+            const std::wstring pv = WindowText(::GetDlgItem(db, IDC_OPT_PREVIEW_ID));
+            Check(!pv.empty(), "默认配置下实时试算行非空");
+            std::printf("  试算行：%s\n", ToUtf8(pv).c_str());
+            if (!g_png_dir.empty())
+            {
+                std::wstring p = g_png_dir + L"\\dialog_options_default.png";
+                std::printf("  截图：%s %s\n", ToUtf8(p).c_str(),
+                            SaveDialogPng(db, p.c_str()) ? "已保存" : "失败");
+            }
+            // 用「取消」关闭：这一步只为截图，绝不能把配置写回去，
+            // 否则后面 Phase 1 起的"默认配置"前提就被破坏了。
+            CloseDialog(db, wb, IDCANCEL, "Phase 0b 取消按钮");
+        }
+    }
+
     // ============================================ Phase 1 主设置对话框渲染
     std::printf("\n============ Phase 1：工资与排班设置 —— 控件渲染 ============\n");
     std::thread worker;

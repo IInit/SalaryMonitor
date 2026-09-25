@@ -519,6 +519,30 @@ int wmain(int argc, wchar_t** argv)
         Check(r2 != nullptr, "资源 IDD_STATS 存在");
     }
 
+    // ============================================ Phase 0 默认配置界面截图
+    // 后面的 Phase 会故意把配置改成"教师 / 月薪 8888 / 货币 $"来验证保存与回显，
+    // 那种图放进 README 会让人误以为默认值就是这些。所以在**任何改动之前**先截
+    // 一张默认配置（程序员 / 月薪 25000 / ¥）下的收益统计图，专门供文档使用。
+    std::printf("\n============ Phase 0：默认配置下的收益统计（供文档截图） ============\n");
+    {
+        std::thread w0;
+        HWND d0 = OpenDialog(plugin, w0, CMD_STATS, 8000);
+        Check(d0 != nullptr, "默认配置下收益统计对话框可打开");
+        if (d0 != nullptr)
+        {
+            ::Sleep(400);
+            const std::wstring sum = WindowText(::GetDlgItem(d0, IDC_STATS_SUMMARY_ID));
+            Check(Contains(ToUtf8(sum), "\xC2\xA5"), "默认配置下货币符号是 ¥（不是测试用 $）");
+            if (!g_png_dir.empty())
+            {
+                std::wstring p = g_png_dir + L"\\dialog_stats_default.png";
+                std::printf("  截图：%s %s\n", ToUtf8(p).c_str(),
+                            SaveDialogPng(d0, p.c_str()) ? "已保存" : "失败");
+            }
+            CloseDialog(d0, w0, IDOK, "Phase 0 关闭按钮");
+        }
+    }
+
     // ============================================ Phase 1 主设置对话框渲染
     std::printf("\n============ Phase 1：工资与排班设置 —— 控件渲染 ============\n");
     std::thread worker;

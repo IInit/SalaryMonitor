@@ -1,0 +1,6 @@
+# 源码一律 LF：本项目的 shell 脚本在 Git Bash 下执行，Python 脚本带 UTF-8 中文，
+# CRLF 会让 shebang / 编码检测变脆。
+* text=auto eol=lf
+*.sln text eol=crlf
+*.ico binary
+*.png binary

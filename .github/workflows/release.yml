@@ -1,0 +1,163 @@
+name: build-and-release
+
+# 打 tag（v*）时自动发布；推送到 main 时构建并确保 release 存在；也支持手动触发。
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  VERSION: v1.0.0
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Locate MSVC / Windows SDK
+        shell: pwsh
+        run: |
+          # ---- MSVC ----------------------------------------------------
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) { throw "vswhere not found at $vswhere" }
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'Visual Studio with VC tools not found' }
+          $msvc = Get-ChildItem "$vs\VC\Tools\MSVC" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          Write-Host "VS   = $vs"
+          Write-Host "MSVC = $($msvc.FullName)"
+          if (-not (Test-Path "$($msvc.FullName)\atlmfc\include\afxwin.h")) {
+            throw "ATL/MFC component missing at $($msvc.FullName)\atlmfc"
+          }
+
+          # ---- Windows SDK ---------------------------------------------
+          # Do NOT hardcode the drive or path: on the runner image the SDK may
+          # live on C: or D:, and the version changes with the image.
+          $sdkRoots = @(
+            "${env:ProgramFiles(x86)}\Windows Kits\10",
+            "$env:ProgramFiles\Windows Kits\10",
+            "D:\Windows Kits\10",
+            "C:\Windows Kits\10"
+          ) | Where-Object { Test-Path (Join-Path $_ 'Include') }
+
+          if (-not $sdkRoots) { throw 'Windows SDK not found in any known location' }
+
+          $sdkRoot = $sdkRoots | Select-Object -First 1
+          $sdkVerDir = Get-ChildItem (Join-Path $sdkRoot 'Include') -Directory |
+                         Where-Object { Test-Path (Join-Path $_.FullName 'ucrt\new.h') } |
+                         Sort-Object { [version]$_.Name } -Descending |
+                         Select-Object -First 1
+          if (-not $sdkVerDir) { throw "No usable SDK (ucrt\new.h missing) under $sdkRoot\Include" }
+
+          Write-Host "SDKroot = $sdkRoot"
+          Write-Host "SDKver  = $($sdkVerDir.Name)"
+
+          # All probe headers must exist, otherwise the build fails later with
+          # a batch of C1083 errors that are hard to trace back to the SDK.
+          foreach ($probe in @('ucrt\new.h', 'ucrt\crtdbg.h', 'um\windows.h', 'shared\winapifamily.h')) {
+            $full = Join-Path $sdkVerDir.FullName $probe
+            if (-not (Test-Path $full)) { throw "SDK header missing: $full" }
+          }
+          Write-Host "SDK header probes: OK"
+
+          # ---- SDK lib directories --------------------------------------
+          foreach ($libProbe in @('ucrt\x64', 'um\x64')) {
+            $full = Join-Path $sdkRoot "Lib\$($sdkVerDir.Name)\$libProbe"
+            if (-not (Test-Path $full)) { throw "SDK lib dir missing: $full" }
+          }
+          Write-Host "SDK lib probes: OK"
+
+          # rc.exe ships with the SDK; its path depends on the SDK version
+          $rc = Get-ChildItem (Join-Path $sdkRoot "bin\$($sdkVerDir.Name)\x64\rc.exe") -ErrorAction SilentlyContinue
+          if (-not $rc) { throw "rc.exe not found under $sdkRoot\bin\$($sdkVerDir.Name)\x64" }
+          Write-Host "RC   = $($rc.FullName)"
+
+          $msvcPath = $msvc.FullName -replace '\\', '/'
+          $sdkPath  = $sdkRoot      -replace '\\', '/'
+          "PM_TC=$msvcPath"           | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "PM_MSVC=$msvcPath"         | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "PM_SDK=$sdkPath"           | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "PM_SDKVER=$($sdkVerDir.Name)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+          Write-Host "`n===== toolchain summary ====="
+          Write-Host "PM_TC     = $msvcPath"
+          Write-Host "PM_MSVC   = $msvcPath"
+          Write-Host "PM_SDK    = $sdkPath"
+          Write-Host "PM_SDKVER = $($sdkVerDir.Name)"
+          Write-Host "=============================`n"
+
+      - name: Build (compile -> link -> engine + host smoke test)
+        shell: bash
+        env:
+          # CI runner 没有交互式桌面，对话框探针只在本地跑
+          PM_SKIP_DIALOG_PROBE: '1'
+        run: |
+          bash build_x64.sh > build.log 2>&1
+          rc=$?
+          tail -n 150 build.log
+          exit $rc
+
+      - name: Package
+        shell: pwsh
+        run: |
+          bash tools/package.sh "$env:VERSION"
+          Get-FileHash x64/Release/SalaryMonitor.dll -Algorithm SHA256 | Format-List
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: SalaryMonitor-x64
+          path: |
+            x64/Release/SalaryMonitor.dll
+            dist/SalaryMonitor-${{ env.VERSION }}-x64.zip
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$env:VERSION" 2>&1 | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            # Release already exists: refresh its notes and assets in place.
+            # Do NOT exit early - otherwise a fixed build would never reach the
+            # release page and users would keep downloading the old binary.
+            Write-Host "Release $env:VERSION exists - updating notes and assets."
+            gh release edit "$env:VERSION" `
+              --title "SalaryMonitor $env:VERSION" `
+              --notes-file .github/RELEASE_NOTES.md
+            gh release upload "$env:VERSION" `
+              "x64/Release/SalaryMonitor.dll" `
+              "dist/SalaryMonitor-$env:VERSION-x64.zip" `
+              --clobber
+          } else {
+            gh release create "$env:VERSION" `
+              --title "SalaryMonitor $env:VERSION" `
+              --notes-file .github/RELEASE_NOTES.md `
+              "x64/Release/SalaryMonitor.dll" `
+              "dist/SalaryMonitor-$env:VERSION-x64.zip"
+          }
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Report failure as an issue
+        if: failure()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $log = ''
+          if (Test-Path build.log) { $log = Get-Content build.log -Raw }
+          if ($log.Length -gt 60000) { $log = $log.Substring($log.Length - 60000) }
+          $body = "Build failed on run $env:GITHUB_RUN_ID`n`n``````text`n$log`n``````"
+          $body | Out-File -Encoding utf8 failure.md
+          gh issue create --title "[ci] build failed (run $env:GITHUB_RUN_ID)" --body-file failure.md
